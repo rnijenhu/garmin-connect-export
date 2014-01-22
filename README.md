@@ -36,3 +36,20 @@ Contributions are welcome, but you might want to open a GitHub Issue if you are 
 Thank You
 ---------
 Thanks for using this program and I hope you find it as useful as I do!
+
+Revisions
+------
+2014 Jan 21: rnijenhu: some minor enhancements 
+		-> removed the annoying messages about missing object members 
+			they where indeed missing, although result was ok. Messages made everything unclear   
+		-> for test/performance reasons I added a force_download option: 
+			True=always download (prev. operation)
+			False=don't download if file already exists (default)
+		-> download gpx AND tcx files
+			Gpx is the most common but it misses some info the tcx contains (like heartrate)   
+			Default it will download both, but one or the other can be disabled
+		-> add datestring to gpx/tcx output file (optional, can be disabled)
+
+
+
+

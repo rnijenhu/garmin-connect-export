@@ -23,12 +23,19 @@ Description: 	Use this script to export your fitness data from Garmin Connect.
 // at https://my.garmin.com/mygarmin/customers/updateAccountInformation.faces
 // to use this script.  Also, you might want to revert this
 // file back to 'username' and 'password' when you're done.
-$username = 'username';
-$password = 'password';
+
+$username = '';
+$password = '';
 
 // Set this if you need it on your installation.
-date_default_timezone_set('America/New_York');
+date_default_timezone_set('Europe/Amsterdam');
 $current_date = date('Y-m-d');
+
+//force download or keep existing tcx/gpx
+$download_force=false;
+//the activity date in the gpx/tcx file name, or disable (empty) 
+$download_date='Y-m-d';
+
 
 // End of user edits.
 
@@ -38,7 +45,38 @@ $limit_maximum = 100;
 // URLs for various services
 $urlGCLogin    = 'http://connect.garmin.com/signin';
 $urlGCSearch   = 'http://connect.garmin.com/proxy/activity-search-service-1.0/json/activities?';
-$urlGCActivity = 'http://connect.garmin.com/proxy/activity-service-1.1/gpx/activity/';
+// Url for downloads, make string empty in case you don't want the download 
+$urlGCActivityGpx = 'http://connect.garmin.com/proxy/activity-service-1.1/gpx/activity/';
+$urlGCActivityTcx = 'http://connect.garmin.com/proxy/activity-service-1.1/tcx/activity/';
+
+//some default functions
+
+/* ap($a, ... ), activity print */ 
+function ap(){
+	// set the the arguments and set $a (activity)
+	if ( ($nr=count(($args=func_get_args()))) <1) 	return(""); 
+	else $a=$args[0];
+
+	if ( 	$nr		==2 && isset(	$a->{$args[1]})) 			
+		return(str_replace("\"", "\"\"",$a->{$args[1]})); 
+	elseif ($nr		==3 && isset(	$a->{$args[1]}->{$args[2]})) 			
+		return(str_replace("\"", "\"\"",$a->{$args[1]}->{$args[2]})); 
+	elseif ($nr		==4 && isset(	$a->{$args[1]}->{$args[2]}->{$args[3]})) 		  
+		return(str_replace("\"", "\"\"",$a->{$args[1]}->{$args[2]}->{$args[3]})); 
+	elseif ($nr		==5 && isset(	$a->{$args[1]}->{$args[2]}->{$args[3]}->{$args[4]})) 
+		return(str_replace("\"", "\"\"",$a->{$args[1]}->{$args[2]}->{$args[3]}->{$args[4]})); 
+	else				return("");
+}
+
+/*return the date value in filename format */
+function ad($a,$format){
+	$d="x";
+	if (empty($format)) return(''); 
+	$s=ap($a,'activity','beginTimestamp','millis');
+	if (!empty($s)) $d=date($format, ((integer) $s)/1000);
+	return($d.'_');
+}
+
 
 // Initially, we need to get a valid session cookie, so we pull the login page.
 curl( $urlGCLogin );
@@ -114,68 +152,86 @@ while( $total_downloaded < $total_to_download ) {
 	// Pull out just the list of activities
 	$activities = $json->{'results'}->{'activities'};
 
+
 	// Process each activity.
 	foreach ( $activities as $a ) {
 		// Display which entry we're working on.
 		print "Garmin Connect activity: [" . $a->{'activity'}->{'activityId'} . "] ";
 		print $a->{'activity'}->{'beginTimestamp'}->{'display'}  . ": ";
 		print $a->{'activity'}->{'activityName'}->{'value'} . "\n";
+		
 
 		// Write data to CSV
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'activityId'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'activityName'}->{'value'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'activityDescription'}->{'value'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'beginTimestamp'}->{'display'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'beginTimestamp'}->{'millis'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'endTimestamp'}->{'display'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'endTimestamp'}->{'millis'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'device'}->{'display'} . " " . $a->{'activity'}->{'device'}->{'version'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'activityType'}->{'parent'}->{'display'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'activityType'}->{'display'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'eventType'}->{'display'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'activityTimeZone'}->{'display'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'maxElevation'}->{'withUnit'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'maxElevation'}->{'value'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'beginLatitude'}->{'value'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'beginLongitude'}->{'value'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'endLatitude'}->{'value'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'endLongitude'}->{'value'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'weightedMeanMovingSpeed'}->{'display'}) . "\"," ); // The units vary between Minutes per Mile and mph, but withUnit always displays "Minutes per Mile"
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'weightedMeanMovingSpeed'}->{'value'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'maxHeartRate'}->{'display'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'weightedMeanHeartRate'}->{'display'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'maxSpeed'}->{'display'}) . "\"," ); // The units vary between Minutes per Mile and mph, but withUnit always displays "Minutes per Mile"
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'maxSpeed'}->{'value'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'sumEnergy'}->{'display'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'sumEnergy'}->{'value'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'sumElapsedDuration'}->{'display'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'sumElapsedDuration'}->{'value'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'sumMovingDuration'}->{'display'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'sumMovingDuration'}->{'value'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'weightedMeanSpeed'}->{'withUnit'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'weightedMeanSpeed'}->{'value'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'sumDistance'}->{'withUnit'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'sumDistance'}->{'value'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'minHeartRate'}->{'display'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'maxElevation'}->{'withUnit'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'maxElevation'}->{'value'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'gainElevation'}->{'withUnit'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'gainElevation'}->{'value'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'lossElevation'}->{'withUnit'}) . "\"," );
-		fwrite( $csv_file, "\"" . str_replace("\"", "\"\"", $a->{'activity'}->{'lossElevation'}->{'value'}) . "\"");
+		fwrite( $csv_file, "\"" . ap($a,'activity','activityId') 							. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','activityName','value')	 					. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','activityDescription','value') 					. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','beginTimestamp','display')					. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','beginTimestamp','millis')					. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','endTimestamp','display')					. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','endTimestamp','millis')						. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','device','display') . " " . ap($a,'activity','device','version') 	. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','activityType','parent','display') 				. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','activityType','display') 					. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','eventType','display') 						. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','activityTimeZone','display') 					. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','maxElevation','withUnit') 					. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','maxElevation','value') 						. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','beginLatitude','value')						. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','beginLongitude','value') 					. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','endLatitude','value') 						. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','endLongitude','value') 						. "\"," );
+// The units vary between Minutes per Mile and mph, but withUnit always displays "Minutes per Mile":
+		fwrite( $csv_file, "\"" . ap($a,'activity','weightedMeanMovingSpeed','display') 				. "\"," ); 
+		fwrite( $csv_file, "\"" . ap($a,'activity','weightedMeanMovingSpeed','value') 				. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','maxHeartRate','display') 					. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','weightedMeanHeartRate','display') 				. "\"," );
+// The units vary between Minutes per Mile and mph, but withUnit always displays "Minutes per Mile":
+		fwrite( $csv_file, "\"" . ap($a,'activity','maxSpeed','display') 						. "\"," ); 
+		fwrite( $csv_file, "\"" . ap($a,'activity','maxSpeed','value') 						. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','sumEnergy','display') 						. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','sumEnergy','value') 						. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','sumElapsedDuration','display') 					. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','sumElapsedDuration','value') 					. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','sumMovingDuration','display') 					. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','sumMovingDuration','value') 					. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','weightedMeanSpeed','withUnit') 					. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','weightedMeanSpeed','value') 					. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','sumDistance','withUnit') 					. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','sumDistance','value') 						. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','minHeartRate','display') 					. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','maxElevation','withUnit') 					. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','maxElevation','value') 						. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','gainElevation','withUnit') 					. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','gainElevation','value') 					. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','lossElevation','withUnit') 					. "\"," );
+		fwrite( $csv_file, "\"" . ap($a,'activity','lossElevation','value') 					. "\" " );
 		fwrite( $csv_file, "\n");
 
 		// Download the GPX file from Garmin Connect
-		// TODO: Consider using TCX files?  Does Garmin Connect include heart rate data in TCX downloads?
-		print "\tDownloading GPX file... ";
+		$gpx_filename = $activities_directory.'/activity_'.ad($a,$download_date).$a->{'activity'}->{'activityId'}.'.gpx';
 
-		$gpx_filename = $activities_directory . '/activity_' . $a->{'activity'}->{'activityId'} . '.gpx';
-		$save_file = fopen( $gpx_filename, 'w+' );
-		$curl_opts = array(
-			CURLOPT_FILE => $save_file
-			);
-		curl( $urlGCActivity . $a->{'activity'}->{'activityId'} . '?full=true', array(), array(), $curl_opts );
-		fclose( $save_file );
+		if ( !empty($urlGCActivityGpx) && ($download_force || !file_exists($gpx_filename))){ 
+			print "\tDownloading GPX file... ";
+			$save_file = fopen( $gpx_filename, 'w+' );
+			$curl_opts = array(
+				CURLOPT_FILE => $save_file
+				);
+			curl( $urlGCActivityGpx . $a->{'activity'}->{'activityId'} . '?full=true', array(), array(), $curl_opts );
+			fclose( $save_file );
+		} else print ("GPX file exists..skipping "); 
+
+		// Download the TCX file from Garmin Connect
+	 	$tcx_filename = $activities_directory.'/activity_'.ad($a,$download_date).$a->{'activity'}->{'activityId'}.'.tcx';
+		
+		if ( !empty($urlGCActivityTcx) && ($download_force || !file_exists($tcx_filename))){ 
+			print "\tDownloading TCX file... ";
+			$save_file = fopen( $tcx_filename, 'w+' );
+			$curl_opts = array(
+				CURLOPT_FILE => $save_file
+				);
+			curl( $urlGCActivityTcx . $a->{'activity'}->{'activityId'} . '?full=true', array(), array(), $curl_opts );
+			fclose( $save_file );
+		} else print ("TCX file exists..skipping "); 
 
 		// Validate the GPX data.  If we have an activity without GPS data (e.g. running on a treadmill),
 		// Garmin Connect still kicks out a GPX, but there is only activity information, no GPS data.
@@ -183,9 +239,9 @@ while( $total_downloaded < $total_to_download ) {
 		$gpxdataexists = ( count( $gpx->trk->trkseg->trkpt ) > 0);
 
 		if ( $gpxdataexists ) {
-			print "Done. GPX data saved.\n";
+			print "Done. \n";
 		} else {
-			print "Done. No track points found.\n";
+			print "Done. Warning: Activity without waypoints !!.\n";
 		}
 	}
 
